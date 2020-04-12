@@ -73,6 +73,35 @@ def check_gfm_url(url):
         url_input = input("  :try again: ")
         return check_gfm_url(url_input) # recursive url check
 
+def get_consolidated_list(ip):
+    '''
+    get consolidated list of donors, except Anonymous
+    <type ip> list
+    <desc ip> cleaned dononations
+
+    <<type op>> list
+    <<desc op>> consolidated list of donors
+    '''
+    names = [x['name'] for x in ip if x['name'] != 'Anonymous']
+    duplicates = []
+    op = []
+    for each in ip:
+        if each['name'] in duplicates:
+            pass
+        elif names.count(each['name']) > 1: # if name appears more than once
+            # sum the donation amounts based on the name
+            summed_amt = sum([float(y['amount']) for y in ip if y['name'] == each['name']])
+            new_dict = {
+                'amount':summed_amt, 
+                'name': each['name'], 
+                'is_anonymous':each['is_anonymous'], 
+                'created_at':each['created_at']}
+            op.append(new_dict) # add the amount to the consolidated list
+            duplicates.append(each['name'])
+        else:
+            op.append(each)
+    return op
+
 def main(url):
     print(f"Called script using <{url}> as input...")
 
@@ -80,17 +109,23 @@ def main(url):
     gfm_name = check_gfm_url(url)
 
     # get clean list of donations from the GFM Gateway
-    cleaned_list = get_donations_list(gfm_name)
+    donations_list = get_donations_list(gfm_name)
+    cleaned_list = [{'amount':x['amount'], 
+                        'name':x['name'].strip(), 
+                        'is_anonymous':x['is_anonymous'], 
+                        'created_at':x['created_at']} for x in donations_list]
 
+    # consolidate donors
+    consolidated_list = get_consolidated_list(cleaned_list)
+    
     # setup output information
     donations = [x["amount"] for x in cleaned_list]
     anondonations = [x["amount"] for x in cleaned_list\
          if x['is_anonymous']]
     nonanondonations = [x["amount"] for x in cleaned_list\
          if not x['is_anonymous']]
-    big_donors = [{'name': x['name'], 'amt': x['amount']} for x in cleaned_list\
-         if x['amount'] >= 500]
 
+    # relevant donation metrics
     print(f"    Number of donations: {len(donations)}\n\
     Total Amount Donated: ${sum(donations)}\n\
     Median Amount: ${int(statistics.median(donations))}\n\
@@ -107,9 +142,12 @@ def main(url):
     Average Anonymous Donation Amount: ${int(statistics.mean(nonanondonations))}\n\
     Largest Anonymous Donation Amount: ${int(max(nonanondonations))}")
 
-    print(f"\n\n   Big Donors: ({len(big_donors)} donations at $100+)")
-    for each in big_donors:
-        print(f"{each['name'].rjust(25)}: ${str(int(each['amt'])).rjust(7)}")
+    # relevant donor metrics
+    print(f"\n\nBig Donors: (Top 10 of {len(donations)} donations)")
+    big_donor_list = sorted([(x['amount'],i) for (i,x) in enumerate(consolidated_list)], reverse=True )[:10]
+    idxd_list = [x[1] for x in big_donor_list]
+    for x in idxd_list:
+        print (f"{str(consolidated_list[x]['name']).rjust(25)} : ${str(int(consolidated_list[x]['amount'])).rjust(5)}")
 
 if __name__ == "__main__": 
     if len(sys.argv) == 2:
